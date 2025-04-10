@@ -30,15 +30,21 @@ def synthesize():
         return jsonify({"error": "Text is required"}), 400
 
     try:
-        log_memory()  # ✅ log before TTS starts
-        generator = pipeline(text, voice=voice, speed=speed, split_pattern=r'[।.!?\n]+')
-        audio_chunks = [audio for _, _, audio in generator]
-        log_memory()  # ✅ log after TTS ends
+        # Split text into small chunks (sentences)
+        import re
+        chunks = re.split(r'[।.!?\n]+', text)
+        chunks = [chunk.strip() for chunk in chunks if chunk.strip()]
 
-        if not audio_chunks:
+        all_audio = []
+        for chunk in chunks:
+            generator = pipeline(chunk, voice=voice, speed=speed)
+            for _, _, audio in generator:
+                all_audio.append(audio)
+
+        if not all_audio:
             return jsonify({"error": "Failed to generate audio"}), 500
 
-        final_audio = np.concatenate(audio_chunks)
+        final_audio = np.concatenate(all_audio)
         filename = f"{uuid.uuid4().hex}.wav"
         file_path = os.path.join(OUTPUT_DIR, filename)
         sf.write(file_path, final_audio, 24000)
@@ -47,6 +53,7 @@ def synthesize():
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
 
 @app.route('/')
 def home():
