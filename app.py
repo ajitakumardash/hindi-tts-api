@@ -6,12 +6,20 @@ import uuid
 import os
 
 app = Flask(__name__)
-pipeline = KPipeline(lang_code='h')  # Hindi TTS pipeline
 
-# Output directory
+# ✅ Try loading Kokoro TTS model with debug info
+try:
+    pipeline = KPipeline(lang_code='h')  # Hindi TTS pipeline
+    print("✅ Kokoro pipeline loaded successfully")
+except Exception as e:
+    print("❌ Error loading Kokoro pipeline:", e)
+    raise e  # Force app to stop if loading fails
+
+# 📁 Output directory for audio files
 OUTPUT_DIR = "outputs"
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
+# 🔉 POST /synthesize endpoint
 @app.route('/synthesize', methods=['POST'])
 def synthesize():
     data = request.get_json()
@@ -23,6 +31,7 @@ def synthesize():
         return jsonify({"error": "Text is required"}), 400
 
     try:
+        print("🎤 Synthesizing:", text[:100])
         generator = pipeline(text, voice=voice, speed=speed, split_pattern=r'[।.!?\n]+')
         audio_chunks = [audio for _, _, audio in generator]
 
@@ -34,14 +43,19 @@ def synthesize():
         file_path = os.path.join(OUTPUT_DIR, filename)
         sf.write(file_path, final_audio, 24000)
 
+        print(f"✅ Audio generated: {file_path}")
         return send_file(file_path, mimetype='audio/wav')
 
     except Exception as e:
+        print("❌ Synthesis error:", str(e))
         return jsonify({"error": str(e)}), 500
 
+# 🌐 GET / - health check
 @app.route('/')
 def home():
     return "✅ Hindi TTS API is running!"
 
+# 🚀 App startup
 if __name__ == '__main__':
+    print("✅ Flask app starting...")
     app.run(host='0.0.0.0', port=5000)
