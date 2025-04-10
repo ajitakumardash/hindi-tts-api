@@ -1,63 +1,52 @@
-from flask import Flask, request, jsonify, send_file
+from flask import Flask, request, send_file, jsonify
 from kokoro import KPipeline
-import soundfile as sf
 import numpy as np
-import uuid
-import os
-import psutil  # 👈 added for memory tracking
+import soundfile as sf
+import io
 
 app = Flask(__name__)
-pipeline = KPipeline(lang_code='h')  # Hindi TTS pipeline
 
-# Output directory
-OUTPUT_DIR = "outputs"
-os.makedirs(OUTPUT_DIR, exist_ok=True)
+# 🧠 Load Hindi TTS pipeline
+pipeline = KPipeline(lang_code='h')
+voices = ['hf_alpha', 'hf_beta', 'hm_omega', 'hm_psi']
 
-# 🧠 Function to log RAM usage
-def log_memory():
-    process = psutil.Process(os.getpid())
-    mem = process.memory_info().rss / (1024 * 1024)  # Convert bytes to MB
-    print(f"🧠 RAM usage: {mem:.2f} MB")
+@app.route("/")
+def index():
+    return jsonify({"message": "Hindi TTS API is running."})
 
-@app.route('/synthesize', methods=['POST'])
+@app.route("/synthesize", methods=["POST"])
 def synthesize():
-    data = request.get_json()
+    data = request.json
+
     text = data.get("text", "")
     voice = data.get("voice", "hf_alpha")
     speed = data.get("speed", 1.0)
 
-    if not text:
-        return jsonify({"error": "Text is required"}), 400
+    if not text.strip():
+        return jsonify({"error": "Text is required."}), 400
 
     try:
-        # Split text into small chunks (sentences)
-        import re
-        chunks = re.split(r'[।.!?\n]+', text)
-        chunks = [chunk.strip() for chunk in chunks if chunk.strip()]
+        generator = pipeline(
+            text=text,
+            voice=voice,
+            speed=float(speed),
+            split_pattern=r'[।.!?\n]+'
+        )
+        audio_chunks = [audio for _, _, audio in generator]
 
-        all_audio = []
-        for chunk in chunks:
-            generator = pipeline(chunk, voice=voice, speed=speed)
-            for _, _, audio in generator:
-                all_audio.append(audio)
+        if not audio_chunks:
+            return jsonify({"error": "No audio generated."}), 500
 
-        if not all_audio:
-            return jsonify({"error": "Failed to generate audio"}), 500
+        final_audio = np.concatenate(audio_chunks)
 
-        final_audio = np.concatenate(all_audio)
-        filename = f"{uuid.uuid4().hex}.wav"
-        file_path = os.path.join(OUTPUT_DIR, filename)
-        sf.write(file_path, final_audio, 24000)
+        # Save to in-memory WAV
+        buf = io.BytesIO()
+        sf.write(buf, final_audio, 24000, format='WAV')
+        buf.seek(0)
 
-        return send_file(file_path, mimetype='audio/wav')
-
+        return send_file(buf, mimetype="audio/wav", download_name="output.wav")
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-
-@app.route('/')
-def home():
-    return "✅ Hindi TTS API is running!"
-
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000)
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=8000)
