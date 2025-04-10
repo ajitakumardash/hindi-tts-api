@@ -4,22 +4,21 @@ import soundfile as sf
 import numpy as np
 import uuid
 import os
+import psutil  # 👈 added for memory tracking
 
 app = Flask(__name__)
+pipeline = KPipeline(lang_code='h')  # Hindi TTS pipeline
 
-# ✅ Try loading Kokoro TTS model with debug info
-try:
-    pipeline = KPipeline(lang_code='h')  # Hindi TTS pipeline
-    print("✅ Kokoro pipeline loaded successfully")
-except Exception as e:
-    print("❌ Error loading Kokoro pipeline:", e)
-    raise e  # Force app to stop if loading fails
-
-# 📁 Output directory for audio files
+# Output directory
 OUTPUT_DIR = "outputs"
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-# 🔉 POST /synthesize endpoint
+# 🧠 Function to log RAM usage
+def log_memory():
+    process = psutil.Process(os.getpid())
+    mem = process.memory_info().rss / (1024 * 1024)  # Convert bytes to MB
+    print(f"🧠 RAM usage: {mem:.2f} MB")
+
 @app.route('/synthesize', methods=['POST'])
 def synthesize():
     data = request.get_json()
@@ -31,9 +30,10 @@ def synthesize():
         return jsonify({"error": "Text is required"}), 400
 
     try:
-        print("🎤 Synthesizing:", text[:100])
+        log_memory()  # ✅ log before TTS starts
         generator = pipeline(text, voice=voice, speed=speed, split_pattern=r'[।.!?\n]+')
         audio_chunks = [audio for _, _, audio in generator]
+        log_memory()  # ✅ log after TTS ends
 
         if not audio_chunks:
             return jsonify({"error": "Failed to generate audio"}), 500
@@ -43,19 +43,14 @@ def synthesize():
         file_path = os.path.join(OUTPUT_DIR, filename)
         sf.write(file_path, final_audio, 24000)
 
-        print(f"✅ Audio generated: {file_path}")
         return send_file(file_path, mimetype='audio/wav')
 
     except Exception as e:
-        print("❌ Synthesis error:", str(e))
         return jsonify({"error": str(e)}), 500
 
-# 🌐 GET / - health check
 @app.route('/')
 def home():
     return "✅ Hindi TTS API is running!"
 
-# 🚀 App startup
 if __name__ == '__main__':
-    print("✅ Flask app starting...")
     app.run(host='0.0.0.0', port=5000)
