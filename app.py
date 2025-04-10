@@ -1,11 +1,12 @@
 from flask import Flask, request, send_file, jsonify
+from flask_cors import CORS
 from kokoro import KPipeline
 import numpy as np
 import soundfile as sf
 import io
 
 app = Flask(__name__)
-
+CORS(app)
 
 # 🧠 Load Hindi TTS pipeline
 pipeline = KPipeline(lang_code='h')
