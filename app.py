@@ -6,7 +6,7 @@ import soundfile as sf
 import io
 
 app = Flask(__name__)
-CORS(app)  # ✅ Enable Cross-Origin Requests (for HTML/JS frontend)
+CORS(app)
 
 # 🧠 Load Hindi TTS pipeline
 pipeline = KPipeline(lang_code='h')
